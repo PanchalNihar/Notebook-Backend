@@ -4,7 +4,7 @@ import io
 import logging
 from dotenv import load_dotenv
 
-import cv2
+import cv2 
 import numpy as np
 import spotipy
 from fastapi import FastAPI, File, UploadFile, HTTPException
