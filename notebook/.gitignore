@@ -1,0 +1,19 @@
+# Environment variables - VERY IMPORTANT
+.env
+
+# Keras model files - too large for GitHub
+*.keras
+*.h5
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# VS Code settings
+.vscode/
+
+# Ignore dataset
+fer2013.csv
