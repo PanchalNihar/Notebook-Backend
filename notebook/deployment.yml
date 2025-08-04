@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: emotion-music-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: emotion-music-backend
+  template:
+    metadata:
+      labels:
+        app: emotion-music-backend
+    spec:
+      containers:
+      - name: emotion-music-backend
+        image: niharpanchal/emotion-music-backend:3.0
+        ports:
+        - containerPort: 8000
+        envFrom:
+        - secretRef:
+            name: spotify-secrets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: emotion-music-backend-service
+spec:
+  selector:
+    app: emotion-music-backend
+  type: LoadBalancer
+  ports:
+    - port: 8000
+      targetPort: 8000
+
