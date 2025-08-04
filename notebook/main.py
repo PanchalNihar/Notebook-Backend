@@ -139,12 +139,18 @@ MOOD_MAPPING = {
 # ------------------------------------------------------------------ #
 
 class TrackOut(BaseModel):
+    id: str  # Spotify track ID
     name: str
     artist: str
+    album: str
     album_art_url: Optional[str] = None
     preview_url: Optional[str] = None
     has_preview: bool
     spotify_url: Optional[str] = None
+    duration_ms: Optional[int] = None
+    explicit: bool = False
+    popularity: Optional[int] = None
+    release_date: Optional[str] = None
 
 
 class RecResponse(BaseModel):
@@ -173,53 +179,38 @@ def preprocess_image(image_bytes: bytes) -> Optional[np.ndarray]:
     return np.reshape(roi, (1, 48, 48, 1))
 
 
-def get_spotify_tracks(emotion: str,offset:int=0) -> List[TrackOut]:
-    """Search Spotify for tracks matching the given emotion."""
+def get_spotify_tracks(emotion: str, offset: int = 0) -> List[TrackOut]:
+    """Enhanced Spotify search with more track details."""
     if sp is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Spotify API not available."
-        )
+        raise HTTPException(status_code=503, detail="Spotify API not available.")
 
     query = MOOD_MAPPING.get(emotion, f"bollywood {emotion}")
     try:
-        results = sp.search(
-            q=query,
-            type="track",
-            limit=20,
-            offset=offset,
-            market="IN"
-        )
+        results = sp.search(q=query, type="track", limit=20, offset=offset, market="IN")
     except Exception as e:
         logging.error("Spotify search error: %s", e)
-        raise HTTPException(
-            status_code=500,
-            detail="Error fetching from Spotify."
-        )
+        raise HTTPException(status_code=500, detail="Error fetching from Spotify.")
 
     items = results["tracks"]["items"]
     if not items:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No tracks found for emotion: {emotion}"
-        )
+        raise HTTPException(status_code=404, detail=f"No tracks found for emotion: {emotion}")
 
     tracks: List[TrackOut] = []
     for t in items:
-        tracks.append(
-            TrackOut(
-                name=t["name"],
-                artist=", ".join(a["name"] for a in t["artists"]),
-                album_art_url=(
-                    t["album"]["images"][0]["url"]
-                    if t["album"]["images"]
-                    else None
-                ),
-                preview_url=t.get("preview_url"),
-                has_preview=bool(t.get("preview_url")),
-                spotify_url=t.get("external_urls", {}).get("spotify"),
-            )
-        )
+        tracks.append(TrackOut(
+            id=t["id"],
+            name=t["name"],
+            artist=", ".join(a["name"] for a in t["artists"]),
+            album=t["album"]["name"],
+            album_art_url=t["album"]["images"][0]["url"] if t["album"]["images"] else None,
+            preview_url=t.get("preview_url"),
+            has_preview=bool(t.get("preview_url")),
+            spotify_url=t.get("external_urls", {}).get("spotify"),
+            duration_ms=t.get("duration_ms"),
+            explicit=t.get("explicit", False),
+            popularity=t.get("popularity"),
+            release_date=t["album"].get("release_date")
+        ))
     return tracks
 
 
