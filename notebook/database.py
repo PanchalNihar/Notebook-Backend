@@ -5,7 +5,7 @@ from beanie import init_beanie
 from models import User, MoodEntry, RecommendedTrack, UserPlaylist
 
 # MongoDB connection
-MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017/moodtune")
+MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017/tuneify")
 
 async def init_db():
     # Create Motor client
@@ -13,7 +13,7 @@ async def init_db():
     
     # Initialize beanie with the document models
     await init_beanie(
-        database=client.moodtune,
+        database=client.tuneify,
         document_models=[User, MoodEntry, RecommendedTrack, UserPlaylist]
     )
 

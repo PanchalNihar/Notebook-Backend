@@ -20,7 +20,6 @@ class User(Document):
     avatar_url: Optional[str] = None
     created_at: datetime = datetime.utcnow()
     is_active: bool = True
-    
     class Settings:
         name = "users"
 
@@ -49,6 +48,7 @@ class RecommendedTrack(Document):
     class Settings:
         name = "recommended_tracks"
 
+# future model
 class UserPlaylist(Document):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     user_id: str

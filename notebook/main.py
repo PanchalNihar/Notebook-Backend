@@ -1,13 +1,7 @@
-# main.py – MoodTune API v2.0
-# -------------------------------------------------
-# FastAPI backend with Google OAuth, JWT auth,
-# MongoDB (Beanie) persistence, emotion detection,
-# and Spotify track recommendations.
-# -------------------------------------------------
-
 import os
 import logging
-from datetime import timedelta
+import time
+from datetime import timedelta, datetime
 from contextlib import asynccontextmanager
 from typing import List, Optional
 from random import randint
@@ -26,7 +20,7 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
-from spotipy.oauth2 import SpotifyClientCredentials
+from spotipy.oauth2 import SpotifyClientCredentials, SpotifyOAuth
 from tensorflow.keras.models import load_model
 
 # Local imports
@@ -53,10 +47,8 @@ from models import (
     LoginRequest,
 )
 
-# ------------------------------------------------------------------ #
-#                Environment & Global Initialisation                 #
-# ------------------------------------------------------------------ #
 
+#Environment & Global Initialisation
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 
@@ -75,16 +67,13 @@ app = FastAPI(
 # CORS (adapt origins for production as needed)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:4200","http://127.0.0.1:4200"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ------------------------------------------------------------------ #
-#                        Spotify Initialisation                      #
-# ------------------------------------------------------------------ #
-
+#Spotify Initialisation
 SPOTIPY_CLIENT_ID = os.getenv("SPOTIPY_CLIENT_ID")
 SPOTIPY_CLIENT_SECRET = os.getenv("SPOTIPY_CLIENT_SECRET")
 
@@ -100,10 +89,7 @@ if SPOTIPY_CLIENT_ID and SPOTIPY_CLIENT_SECRET:
     except Exception as e:
         logging.error("Could not connect to Spotify API: %s", e)
 
-# ------------------------------------------------------------------ #
-#                       Emotion model & OpenCV                       #
-# ------------------------------------------------------------------ #
-
+# Emotion model & OpenCV#
 try:
     emotion_model = load_model("face_emotion_model.keras")
     logging.info("Emotion detection model loaded.")
@@ -134,10 +120,8 @@ MOOD_MAPPING = {
     "DHH": "desi hip hop hindi rap",
 }
 
-# ------------------------------------------------------------------ #
-#                       Pydantic Helper Models                       #
-# ------------------------------------------------------------------ #
 
+#Pydantic Helper Models
 class TrackOut(BaseModel):
     id: str  # Spotify track ID
     name: str
@@ -160,10 +144,7 @@ class RecResponse(BaseModel):
     mood_entry_id: Optional[str] = None
 
 
-# ------------------------------------------------------------------ #
-#                         Utility Functions                          #
-# ------------------------------------------------------------------ #
-
+#Utility Functions
 def preprocess_image(image_bytes: bytes) -> Optional[np.ndarray]:
     """Detect a face, crop, normalise and reshape for model."""
     nparr = np.frombuffer(image_bytes, np.uint8)
@@ -214,10 +195,7 @@ def get_spotify_tracks(emotion: str, offset: int = 0) -> List[TrackOut]:
     return tracks
 
 
-# ------------------------------------------------------------------ #
-#                    Auth / Security Dependencies                    #
-# ------------------------------------------------------------------ #
-
+#Auth / Security Dependencies
 security = HTTPBearer()
 
 
@@ -237,11 +215,10 @@ async def get_current_user(
     return user
 
 
-# ------------------------------------------------------------------ #
-#                             Endpoints                              #
-# ------------------------------------------------------------------ #
 
-# Google OAuth ------------------------------------------------------ #
+#Endpoints
+
+# Google OAuth 
 @app.post("/auth/google", response_model=AuthResponse)
 async def google_auth(body: GoogleAuthRequest):
     try:
@@ -458,8 +435,49 @@ async def mood_history(
         },
     ]
 
-    result = await MoodEntry.aggregate(pipeline).to_list()
+    # Fix: Use the cursor correctly with Beanie
+    try:
+        # Method 1: Use async iteration
+        result = []
+        async for doc in MoodEntry.aggregate(pipeline):
+            result.append(doc)
+    except Exception as e:
+        # Method 2: Alternative approach using find method
+        print(f"Aggregation error: {e}")
+        # Fallback: Get recent mood entries and process them manually
+        recent_entries = await MoodEntry.find(
+            MoodEntry.user_id == current_user.id,
+            MoodEntry.created_at >= start_date
+        ).to_list()
+        
+        # Process manually
+        emotion_distribution: dict[str, int] = {}
+        mood_timeline: dict[str, dict[str, int]] = {}
+        total_entries = len(recent_entries)
+        
+        for entry in recent_entries:
+            emotion = entry.emotion
+            date_str = entry.created_at.strftime("%Y-%m-%d")
+            
+            # Update emotion distribution
+            emotion_distribution[emotion] = emotion_distribution.get(emotion, 0) + 1
+            
+            # Update mood timeline
+            if date_str not in mood_timeline:
+                mood_timeline[date_str] = {}
+            mood_timeline[date_str][emotion] = mood_timeline[date_str].get(emotion, 0) + 1
+        
+        return {
+            "emotion_distribution": emotion_distribution,
+            "total_entries": total_entries,
+            "mood_timeline": mood_timeline,
+            "date_range": {
+                "start": start_date.isoformat(),
+                "end": datetime.utcnow().isoformat(),
+            },
+        }
 
+    # Process aggregation results
     emotion_distribution: dict[str, int] = {}
     mood_timeline: dict[str, dict[str, int]] = {}
     total_entries = 0
