@@ -2,7 +2,6 @@
 .env
 
 # Keras model files - too large for GitHub
-*.keras
 *.h5
 
 # Python cache
