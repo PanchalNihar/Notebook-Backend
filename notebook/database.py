@@ -3,17 +3,25 @@ import os
 import motor.motor_asyncio
 from beanie import init_beanie
 from models import User, MoodEntry, RecommendedTrack, UserPlaylist
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # MongoDB connection
-MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017/tuneify")
+MONGODB_URL = os.getenv("MONGODB_URL")
+print("Mongo URL:", MONGODB_URL)
 
 async def init_db():
+    if not MONGODB_URL:
+        raise ValueError("MONGODB_URL is not set in .env")
+
     # Create Motor client
     client = motor.motor_asyncio.AsyncIOMotorClient(MONGODB_URL)
-    
+
     # Initialize beanie with the document models
     await init_beanie(
-        database=client.tuneify,
+        database=client.tuneify,  # this ensures DB name is 'tuneify'
         document_models=[User, MoodEntry, RecommendedTrack, UserPlaylist]
     )
 
