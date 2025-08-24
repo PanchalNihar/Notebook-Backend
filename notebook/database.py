@@ -1,9 +1,9 @@
-# database.py
 import os
 import motor.motor_asyncio
 from beanie import init_beanie
-from models import User, MoodEntry, RecommendedTrack, UserPlaylist
+from notebook.models import User, MoodEntry, RecommendedTrack, UserPlaylist
 from dotenv import load_dotenv
+
 
 # Load environment variables
 load_dotenv()

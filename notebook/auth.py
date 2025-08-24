@@ -1,11 +1,13 @@
+#auth.py
 import os
 from datetime import datetime, timedelta
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from google.auth.transport import requests
 from google.oauth2 import id_token
-from models import User, LoginRequest, RegisterRequest, AuthResponse, UserResponse
+from notebook.models import User, LoginRequest, RegisterRequest, AuthResponse, UserResponse
 import uuid
+
 
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here")
 ALGORITHM = "HS256"
