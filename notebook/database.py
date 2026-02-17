@@ -10,8 +10,6 @@ load_dotenv()
 
 # MongoDB connection
 MONGODB_URL = os.getenv("MONGODB_URL")
-print("Mongo URL:", MONGODB_URL)
-
 async def init_db():
     if not MONGODB_URL:
         raise ValueError("MONGODB_URL is not set in .env")
