@@ -1,4 +1,4 @@
-# Environment variables - VERY IMPORTANT
+# Environment variables - VERY IMPORTANT.
 .env
 
 # Keras model files - too large for GitHub
