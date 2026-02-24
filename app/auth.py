@@ -5,7 +5,7 @@ from passlib.context import CryptContext
 from jose import JWTError, jwt
 from google.auth.transport import requests
 from google.oauth2 import id_token
-from notebook.models import User, LoginRequest, RegisterRequest, AuthResponse, UserResponse
+from app.models import User, LoginRequest, RegisterRequest, AuthResponse, UserResponse
 import uuid
 
 

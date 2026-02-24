@@ -24,8 +24,8 @@ from spotipy.oauth2 import SpotifyClientCredentials, SpotifyOAuth
 from tensorflow.keras.models import load_model
 
 # Local imports
-from notebook.database import init_db
-from notebook.auth import (
+from app.database import init_db
+from app.auth import (
     verify_token,
     create_access_token,
     verify_google_token,
@@ -35,7 +35,7 @@ from notebook.auth import (
     create_user,
     get_password_hash
 )
-from notebook.models import (
+from app.models import (
     User,
     MoodEntry,
     RecommendedTrack,

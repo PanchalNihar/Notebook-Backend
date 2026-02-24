@@ -1,7 +1,7 @@
 import os
 import motor.motor_asyncio
 from beanie import init_beanie
-from notebook.models import User, MoodEntry, RecommendedTrack, UserPlaylist
+from app.models import User, MoodEntry, RecommendedTrack, UserPlaylist
 from dotenv import load_dotenv
 
 
