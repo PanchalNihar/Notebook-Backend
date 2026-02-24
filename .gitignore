@@ -16,3 +16,5 @@ __pycache__/
 
 # Ignore dataset
 fer2013.csv
+
+venv/
