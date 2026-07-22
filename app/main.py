@@ -25,6 +25,7 @@ from tensorflow.keras.models import load_model
 
 # Local imports
 from app.database import init_db
+from app.seed_catalog import seed_cached_tracks
 from app.auth import (
     verify_token,
     create_access_token,
@@ -39,6 +40,7 @@ from app.models import (
     User,
     MoodEntry,
     RecommendedTrack,
+    CachedTrack,
     DetectionMethod,
     GoogleAuthRequest,
     AuthResponse,
@@ -57,6 +59,7 @@ logging.basicConfig(level=logging.INFO)
 @asynccontextmanager
 async def lifespan(app_: FastAPI):
     await init_db()
+    await seed_cached_tracks()
     yield
 
 app = FastAPI(
@@ -143,6 +146,7 @@ class RecResponse(BaseModel):
     confidence: Optional[float] = None
     tracks: List[TrackOut]
     mood_entry_id: Optional[str] = None
+    is_fallback: bool = False
 
 
 #Utility Functions
@@ -161,39 +165,102 @@ def preprocess_image(image_bytes: bytes) -> Optional[np.ndarray]:
     return np.reshape(roi, (1, 48, 48, 1))
 
 
-def get_spotify_tracks(emotion: str, offset: int = 0) -> List[TrackOut]:
-    """Enhanced Spotify search with more track details."""
-    if sp is None:
-        raise HTTPException(status_code=503, detail="Spotify API not available.")
+EMOTION_SYNONYMS = {
+    "romantic": "Romantic",
+    "love": "Romantic",
+    "gym": "Gym",
+    "energetic": "Gym",
+    "workout": "Gym",
+    "party": "Happy",
+    "upbeat": "Happy",
+    "dance": "Happy",
+    "chill": "Neutral",
+    "lofi": "Neutral",
+    "calm": "Neutral",
+    "peaceful": "Neutral",
+    "sad": "Sad",
+    "heartbreak": "Sad",
+    "angry": "Angry",
+    "rock": "Angry",
+}
 
-    query = MOOD_MAPPING.get(emotion, f"bollywood {emotion}")
-    try:
-        results = sp.search(q=query, type="track", limit=20, offset=offset, market="IN")
-    except Exception as e:
-        logging.error("Spotify search error: %s", e)
-        raise HTTPException(status_code=500, detail="Error fetching from Spotify.")
+async def get_fallback_tracks(emotion: str) -> List[TrackOut]:
+    """Fetch cached fallback tracks from MongoDB with intelligent keyword matching and sampling."""
+    norm = emotion.strip().lower()
+    target_emotion = EMOTION_SYNONYMS.get(norm, emotion.strip().capitalize())
 
-    items = results["tracks"]["items"]
-    if not items:
-        raise HTTPException(status_code=404, detail=f"No tracks found for emotion: {emotion}")
+    # 1. Exact match on target_emotion
+    cached_docs = await CachedTrack.find(CachedTrack.emotion == target_emotion).to_list()
+    
+    # 2. Case-insensitive regex match across emotion, name, artist, or album
+    if not cached_docs:
+        cached_docs = await CachedTrack.find({"$or": [
+            {"emotion": {"$regex": norm, "$options": "i"}},
+            {"name": {"$regex": norm, "$options": "i"}},
+            {"artist": {"$regex": norm, "$options": "i"}},
+            {"album": {"$regex": norm, "$options": "i"}}
+        ]}).to_list()
+
+    # 3. Deterministic pseudo-random sample per search term if no direct keyword match
+    if not cached_docs:
+        all_docs = await CachedTrack.find_all().to_list()
+        if all_docs:
+            import random
+            # Hash search query to consistently give distinct, varied results per unique search term
+            rng = random.Random(abs(hash(norm)))
+            sample_size = min(10, len(all_docs))
+            cached_docs = rng.sample(all_docs, sample_size)
 
     tracks: List[TrackOut] = []
-    for t in items:
+    for ct in cached_docs:
         tracks.append(TrackOut(
-            id=t["id"],
-            name=t["name"],
-            artist=", ".join(a["name"] for a in t["artists"]),
-            album=t["album"]["name"],
-            album_art_url=t["album"]["images"][0]["url"] if t["album"]["images"] else None,
-            preview_url=t.get("preview_url"),
-            has_preview=bool(t.get("preview_url")),
-            spotify_url=t.get("external_urls", {}).get("spotify"),
-            duration_ms=t.get("duration_ms"),
-            explicit=t.get("explicit", False),
-            popularity=t.get("popularity"),
-            release_date=t["album"].get("release_date")
+            id=ct.spotify_id,
+            name=ct.name,
+            artist=ct.artist,
+            album=ct.album,
+            album_art_url=ct.album_art_url,
+            preview_url=ct.preview_url,
+            has_preview=bool(ct.preview_url),
+            spotify_url=ct.spotify_url,
+            duration_ms=ct.duration_ms,
+            explicit=ct.explicit,
+            popularity=ct.popularity,
+            release_date=ct.release_date
         ))
     return tracks
+
+
+async def get_tracks_for_emotion(emotion: str, offset: int = 0) -> tuple[List[TrackOut], bool]:
+    """Fetch tracks from Spotify API with automatic fallback to MongoDB seed catalog."""
+    if sp is not None:
+        query = MOOD_MAPPING.get(emotion, f"bollywood {emotion}")
+        try:
+            results = sp.search(q=query, type="track", limit=20, offset=offset, market="IN")
+            items = results["tracks"]["items"]
+            if items:
+                tracks: List[TrackOut] = []
+                for t in items:
+                    tracks.append(TrackOut(
+                        id=t["id"],
+                        name=t["name"],
+                        artist=", ".join(a["name"] for a in t["artists"]),
+                        album=t["album"]["name"],
+                        album_art_url=t["album"]["images"][0]["url"] if t["album"]["images"] else None,
+                        preview_url=t.get("preview_url"),
+                        has_preview=bool(t.get("preview_url")),
+                        spotify_url=t.get("external_urls", {}).get("spotify"),
+                        duration_ms=t.get("duration_ms"),
+                        explicit=t.get("explicit", False),
+                        popularity=t.get("popularity"),
+                        release_date=t["album"].get("release_date")
+                    ))
+                return tracks, False
+        except Exception as e:
+            logging.warning("Spotify API unavailable (%s). Falling back to MongoDB local catalog.", e)
+
+    # Fallback to local catalog
+    fallback_tracks = await get_fallback_tracks(emotion)
+    return fallback_tracks, True
 
 
 #Auth / Security Dependencies
@@ -323,7 +390,7 @@ async def recommend_by_image(
     predicted_emotion = EMOTION_LABELS[int(np.argmax(preds))]
     confidence = float(np.max(preds))
 
-    tracks = get_spotify_tracks(predicted_emotion)
+    tracks, is_fallback = await get_tracks_for_emotion(predicted_emotion)
 
     # Save mood entry & tracks to MongoDB ---------------------------
     mood_entry = MoodEntry(
@@ -350,6 +417,7 @@ async def recommend_by_image(
         confidence=confidence,
         tracks=tracks,
         mood_entry_id=mood_entry.id,
+        is_fallback=is_fallback,
     )
 
 
@@ -363,7 +431,7 @@ async def recommend_by_text(
     current_user: User = Depends(get_current_user),
 ):
     normalized = emotion_text.strip().capitalize()
-    tracks = get_spotify_tracks(normalized,offset=offset)
+    tracks, is_fallback = await get_tracks_for_emotion(normalized, offset=offset)
 
     mood_entry = MoodEntry(
         user_id=current_user.id,
@@ -387,6 +455,7 @@ async def recommend_by_text(
         emotion=normalized,
         tracks=tracks,
         mood_entry_id=mood_entry.id,
+        is_fallback=is_fallback,
     )
 
 

@@ -2,7 +2,7 @@
 from beanie import Document, Indexed
 from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Annotated
 import uuid
 from enum import Enum
 
@@ -12,7 +12,7 @@ class DetectionMethod(str, Enum):
 
 class User(Document):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    email: Indexed(EmailStr, unique=True)
+    email: Annotated[EmailStr, Indexed(unique=True)]
     username: Optional[str] = None
     password_hash: Optional[str]=None
     google_id: Optional[str] = None
@@ -59,6 +59,25 @@ class UserPlaylist(Document):
     
     class Settings:
         name = "user_playlists"
+
+class CachedTrack(Document):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    emotion: Annotated[str, Indexed()]
+    spotify_id: str
+    name: str
+    artist: str
+    album: str
+    album_art_url: Optional[str] = None
+    preview_url: Optional[str] = None
+    spotify_url: Optional[str] = None
+    duration_ms: Optional[int] = None
+    explicit: bool = False
+    popularity: Optional[int] = None
+    release_date: Optional[str] = None
+    created_at: datetime = datetime.utcnow()
+
+    class Settings:
+        name = "cached_tracks"
 
 # Pydantic models for API requests/responses
 class LoginRequest(BaseModel):

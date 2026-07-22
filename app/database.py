@@ -1,7 +1,7 @@
 import os
 import motor.motor_asyncio
 from beanie import init_beanie
-from app.models import User, MoodEntry, RecommendedTrack, UserPlaylist
+from app.models import User, MoodEntry, RecommendedTrack, UserPlaylist, CachedTrack
 from dotenv import load_dotenv
 
 
@@ -20,7 +20,7 @@ async def init_db():
     # Initialize beanie with the document models
     await init_beanie(
         database=client.tuneify,  # this ensures DB name is 'tuneify'
-        document_models=[User, MoodEntry, RecommendedTrack, UserPlaylist]
+        document_models=[User, MoodEntry, RecommendedTrack, UserPlaylist, CachedTrack]
     )
 
 # Google OAuth configuration
