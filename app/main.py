@@ -151,15 +151,24 @@ class RecResponse(BaseModel):
 
 #Utility Functions
 def preprocess_image(image_bytes: bytes) -> Optional[np.ndarray]:
-    """Detect a face, crop, normalise and reshape for model."""
+    """Detect a face, crop, normalise and reshape for model. Fallback to center crop if no face detected."""
     nparr = np.frombuffer(image_bytes, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    faces = face_cascade.detectMultiScale(gray, 1.3, 5)
-    if len(faces) == 0:
+    if img is None:
         return None
-    x, y, w, h = faces[0]
-    roi = gray[y:y + h, x:x + w]
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    faces = face_cascade.detectMultiScale(gray, 1.1, 3)
+    if len(faces) > 0:
+        x, y, w, h = faces[0]
+        roi = gray[y:y + h, x:x + w]
+    else:
+        # Fallback to center square crop of image
+        h_img, w_img = gray.shape[:2]
+        min_dim = min(h_img, w_img)
+        start_x = (w_img - min_dim) // 2
+        start_y = (h_img - min_dim) // 2
+        roi = gray[start_y:start_y + min_dim, start_x:start_x + min_dim]
+
     roi = cv2.resize(roi, (48, 48))
     roi = roi / 255.0
     return np.reshape(roi, (1, 48, 48, 1))
